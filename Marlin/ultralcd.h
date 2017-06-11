@@ -1,197 +1,187 @@
+/**
+ * Marlin 3D Printer Firmware
+ * Copyright (C) 2016 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
+ *
+ * Based on Sprinter and grbl.
+ * Copyright (C) 2011 Camiel Gubbels / Erik van der Zalm
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
 #ifndef ULTRALCD_H
 #define ULTRALCD_H
 
 #include "Marlin.h"
 
-#ifdef ULTRA_LCD
-#include "language.h"
+#if ENABLED(ULTRA_LCD)
 
-#if LANGUAGE_CHOICE == 6
-#include "LiquidCrystalRus.h"
-#define LCD_CLASS LiquidCrystalRus
-#else
-#include <LiquidCrystal.h>
-#define LCD_CLASS LiquidCrystal
-#endif
+  #define BUTTON_EXISTS(BN) (defined(BTN_## BN) && BTN_## BN >= 0)
+  #define BUTTON_PRESSED(BN) !READ(BTN_## BN)
 
-void lcd_status();
-void lcd_init();
-void lcd_status(const char* message);
-void beep();
-void buttons_init();
-void buttons_check();
+  int lcd_strlen(const char* s);
+  int lcd_strlen_P(const char* s);
+  void lcd_update();
+  void lcd_init();
+  bool lcd_hasstatus();
+  void lcd_setstatus(const char* message, const bool persist=false);
+  void lcd_setstatuspgm(const char* message, const uint8_t level=0);
+  void lcd_setalertstatuspgm(const char* message);
+  void lcd_reset_alert_level();
+  bool lcd_detected(void);
+  void lcd_kill_screen();
+  void kill_screen(const char* lcd_msg);
 
-#define LCD_UPDATE_INTERVAL 100
-#define STATUSTIMEOUT 15000
+  #if ENABLED(LCD_USE_I2C_BUZZER)
+    void lcd_buzz(long duration, uint16_t freq);
+  #endif
 
-extern LCD_CLASS lcd;
+  #if ENABLED(LCD_PROGRESS_BAR) && PROGRESS_MSG_EXPIRE > 0
+    void dontExpireStatus();
+  #endif
 
-extern volatile char buttons;  //the last checked buttons in a bit array.
-  
-#ifdef NEWPANEL
-    #define EN_C (1<<BLEN_C)
-    #define EN_B (1<<BLEN_B)
-    #define EN_A (1<<BLEN_A)
+  #if ENABLED(DOGLCD)
+    extern int lcd_contrast;
+    void set_lcd_contrast(int value);
+  #elif ENABLED(SHOW_BOOTSCREEN)
+    void bootscreen();
+  #endif
 
-    #define CLICKED (buttons&EN_C)
-    #define BLOCK {blocking=millis()+blocktime;}
-#else
-    //atomatic, do not change
-    #define B_LE (1<<BL_LE)
-    #define B_UP (1<<BL_UP)
-    #define B_MI (1<<BL_MI)
-    #define B_DW (1<<BL_DW)
-    #define B_RI (1<<BL_RI)
-    #define B_ST (1<<BL_ST)
-    #define EN_B (1<<BLEN_B)
-    #define EN_A (1<<BLEN_A)
-    
-    #define CLICKED ((buttons&B_MI)||(buttons&B_ST))
-    #define BLOCK {blocking[BL_MI]=millis()+blocktime;blocking[BL_ST]=millis()+blocktime;}
-#endif
+  #define LCD_MESSAGEPGM(x) lcd_setstatuspgm(PSTR(x))
+  #define LCD_ALERTMESSAGEPGM(x) lcd_setalertstatuspgm(PSTR(x))
 
-#if (SDCARDDETECT > -1)
-#ifdef SDCARDDETECTINVERTED 
-#define CARDINSERTED (READ(SDCARDDETECT)!=0)
-#else
-#define CARDINSERTED (READ(SDCARDDETECT)==0)
-#endif //SDCARDTETECTINVERTED
-#else
-//If we don't have a card detect line, aways asume the card is inserted
-#define CARDINSERTED true
-#endif
+  #define LCD_UPDATE_INTERVAL 100
+  #define LCD_TIMEOUT_TO_STATUS 15000
 
-    
-  // blocking time for recognizing a new keypress of one key, ms
-  #define blocktime 500
-  #define lcdslow 5
-    
-  enum MainStatus{Main_Status, Main_Menu, Main_Prepare,Sub_PrepareMove, Main_Control, Main_SD,Sub_TempControl,Sub_MotionControl,Sub_RetractControl, Sub_PreheatPLASettings, Sub_PreheatABSSettings};
+  #if ENABLED(ULTIPANEL)
+    extern volatile uint8_t buttons;  //the last checked buttons in a bit array.
+    void lcd_buttons_update();
+    void lcd_quick_feedback(); // Audible feedback for a button click - could also be visual
+    bool lcd_clicked();
+    void lcd_ignore_click(bool b=true);
 
-  class MainMenu{
-  public:
-    MainMenu();
-    void update();
-    int8_t activeline;
-    MainStatus status;
-    uint8_t displayStartingRow;
-    
-    void showStatus();
-    void showMainMenu();
-    void showPrepare();
-    void showTune();
-    void showControl();
-    void showControlMotion();
-    void showControlTemp();
-    void showControlRetract();
-    void showAxisMove();
-    void showSD();
-	void showPLAsettings();
-	void showABSsettings();
-    bool force_lcd_update;
-    long lastencoderpos;
-    int8_t lineoffset;
-    int8_t lastlineoffset;
-    
-    bool linechanging;
-    
-    bool tune;
-    
-  private:
-    FORCE_INLINE void updateActiveLines(const uint8_t &maxlines,volatile long &encoderpos)
-    {
-      if(linechanging) return; // an item is changint its value, do not switch lines hence
-      lastlineoffset=lineoffset; 
-      long curencoderpos=encoderpos;  
-      force_lcd_update=false;
-      if(  (abs(curencoderpos-lastencoderpos)<lcdslow) ) 
-      { 
-        lcd.setCursor(0,activeline);lcd.print((activeline+lineoffset)?' ':' '); 
-        if(curencoderpos<0)  
-        {  
-          lineoffset--; 
-          if(lineoffset<0) lineoffset=0; 
-          curencoderpos=lcdslow-1;
-        } 
-        if(curencoderpos>(LCD_HEIGHT-1+1)*lcdslow) 
-        { 
-          lineoffset++; 
-          curencoderpos=(LCD_HEIGHT-1)*lcdslow; 
-          if(lineoffset>(maxlines+1-LCD_HEIGHT)) 
-            lineoffset=maxlines+1-LCD_HEIGHT; 
-          if(curencoderpos>maxlines*lcdslow) 
-            curencoderpos=maxlines*lcdslow; 
-        } 
-        lastencoderpos=encoderpos=curencoderpos;
-        activeline=curencoderpos/lcdslow;
-        if(activeline<0) activeline=0;
-        if(activeline>LCD_HEIGHT-1) activeline=LCD_HEIGHT-1;
-        if(activeline>maxlines) 
-        {
-          activeline=maxlines;
-          curencoderpos=maxlines*lcdslow;
-        }
-        if(lastlineoffset!=lineoffset)
-          force_lcd_update=true;
-        lcd.setCursor(0,activeline);lcd.print((activeline+lineoffset)?'>':'\003');    
-      } 
-    }
-    
-    FORCE_INLINE void clearIfNecessary()
-    {
-      if(lastlineoffset!=lineoffset ||force_lcd_update)
-      {
-        force_lcd_update=true;
-         lcd.clear();
-      } 
-    }
-  };
+    #if ENABLED(FILAMENT_CHANGE_FEATURE)
+      void lcd_filament_change_show_message(FilamentChangeMessage message);
+    #endif // FILAMENT_CHANGE_FEATURE
 
-  //conversion routines, could need some overworking
-  char *ftostr51(const float &x);
-  char *ftostr52(const float &x);
-  char *ftostr31(const float &x);
-  char *ftostr3(const float &x);
+  #else
+    FORCE_INLINE void lcd_buttons_update() {}
+  #endif
 
+  extern int preheatHotendTemp1;
+  extern int preheatBedTemp1;
+  extern int preheatFanSpeed1;
+  extern int preheatHotendTemp2;
+  extern int preheatBedTemp2;
+  extern int preheatFanSpeed2;
 
-  #define LCD_INIT lcd_init();
-  #define LCD_MESSAGE(x) lcd_status(x);
-  #define LCD_MESSAGEPGM(x) lcd_statuspgm(PSTR(x));
-  #define LCD_ALERTMESSAGEPGM(x) lcd_alertstatuspgm(PSTR(x));
-  #define LCD_STATUS lcd_status()
-#else //no lcd
-  #define LCD_INIT
-  #define LCD_STATUS
-  #define LCD_MESSAGE(x)
-  #define LCD_MESSAGEPGM(x)
-  #define LCD_ALERTMESSAGEPGM(x)
-  FORCE_INLINE void lcd_status() {};
+  #if ENABLED(FILAMENT_LCD_DISPLAY)
+    extern millis_t previous_lcd_status_ms;
+  #endif
 
-  #define CLICKED false
-  #define BLOCK ;
-#endif 
-  
-void lcd_statuspgm(const char* message);
-void lcd_alertstatuspgm(const char* message);
-  
-char *ftostr3(const float &x);
-char *itostr2(const uint8_t &x);
-char *ftostr31(const float &x);
-char *ftostr32(const float &x);
-char *itostr31(const int &xx);
-char *itostr3(const int &xx);
-char *itostr4(const int &xx);
-char *ftostr51(const float &x);
+  bool lcd_blink();
 
-//TODO: These do not belong here.
-extern int plaPreheatHotendTemp;
-extern int plaPreheatHPBTemp;
-extern int plaPreheatFanSpeed;
+  #if ENABLED(ULTIPANEL)
+    #define BLEN_A 0
+    #define BLEN_B 1
+    // Encoder click is directly connected
+    #if BUTTON_EXISTS(ENC)
+      #define BLEN_C 2
+      #define EN_C (_BV(BLEN_C))
+    #endif
+    #define EN_A (_BV(BLEN_A))
+    #define EN_B (_BV(BLEN_B))
+    #define EN_C (_BV(BLEN_C))
+  #endif
 
-extern int absPreheatHotendTemp;
-extern int absPreheatHPBTemp;
-extern int absPreheatFanSpeed;
+  #if ENABLED(REPRAPWORLD_KEYPAD) // is also ULTIPANEL and NEWPANEL
 
-#endif //ULTRALCD
+    #define REPRAPWORLD_BTN_OFFSET 0 // bit offset into buttons for shift register values
 
+    #define BLEN_REPRAPWORLD_KEYPAD_F3     0
+    #define BLEN_REPRAPWORLD_KEYPAD_F2     1
+    #define BLEN_REPRAPWORLD_KEYPAD_F1     2
+    #define BLEN_REPRAPWORLD_KEYPAD_DOWN   3
+    #define BLEN_REPRAPWORLD_KEYPAD_RIGHT  4
+    #define BLEN_REPRAPWORLD_KEYPAD_MIDDLE 5
+    #define BLEN_REPRAPWORLD_KEYPAD_UP     6
+    #define BLEN_REPRAPWORLD_KEYPAD_LEFT   7
 
+    #define EN_REPRAPWORLD_KEYPAD_F3      (_BV(REPRAPWORLD_BTN_OFFSET + BLEN_REPRAPWORLD_KEYPAD_F3))
+    #define EN_REPRAPWORLD_KEYPAD_F2      (_BV(REPRAPWORLD_BTN_OFFSET + BLEN_REPRAPWORLD_KEYPAD_F2))
+    #define EN_REPRAPWORLD_KEYPAD_F1      (_BV(REPRAPWORLD_BTN_OFFSET + BLEN_REPRAPWORLD_KEYPAD_F1))
+    #define EN_REPRAPWORLD_KEYPAD_DOWN    (_BV(REPRAPWORLD_BTN_OFFSET + BLEN_REPRAPWORLD_KEYPAD_DOWN))
+    #define EN_REPRAPWORLD_KEYPAD_RIGHT   (_BV(REPRAPWORLD_BTN_OFFSET + BLEN_REPRAPWORLD_KEYPAD_RIGHT))
+    #define EN_REPRAPWORLD_KEYPAD_MIDDLE  (_BV(REPRAPWORLD_BTN_OFFSET + BLEN_REPRAPWORLD_KEYPAD_MIDDLE))
+    #define EN_REPRAPWORLD_KEYPAD_UP      (_BV(REPRAPWORLD_BTN_OFFSET + BLEN_REPRAPWORLD_KEYPAD_UP))
+    #define EN_REPRAPWORLD_KEYPAD_LEFT    (_BV(REPRAPWORLD_BTN_OFFSET + BLEN_REPRAPWORLD_KEYPAD_LEFT))
+
+    #define REPRAPWORLD_KEYPAD_MOVE_Z_DOWN  (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_F3)
+    #define REPRAPWORLD_KEYPAD_MOVE_Z_UP    (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_F2)
+    #define REPRAPWORLD_KEYPAD_MOVE_MENU    (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_F1)
+    #define REPRAPWORLD_KEYPAD_MOVE_Y_DOWN  (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_DOWN)
+    #define REPRAPWORLD_KEYPAD_MOVE_X_RIGHT (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_RIGHT)
+    #define REPRAPWORLD_KEYPAD_MOVE_HOME    (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_MIDDLE)
+    #define REPRAPWORLD_KEYPAD_MOVE_Y_UP    (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_UP)
+    #define REPRAPWORLD_KEYPAD_MOVE_X_LEFT  (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_LEFT)
+
+    #define REPRAPWORLD_KEYPAD_PRESSED      (buttons_reprapworld_keypad & ( \
+                                              EN_REPRAPWORLD_KEYPAD_F3 | \
+                                              EN_REPRAPWORLD_KEYPAD_F2 | \
+                                              EN_REPRAPWORLD_KEYPAD_F1 | \
+                                              EN_REPRAPWORLD_KEYPAD_DOWN | \
+                                              EN_REPRAPWORLD_KEYPAD_RIGHT | \
+                                              EN_REPRAPWORLD_KEYPAD_MIDDLE | \
+                                              EN_REPRAPWORLD_KEYPAD_UP | \
+                                              EN_REPRAPWORLD_KEYPAD_LEFT) \
+                                            )
+
+    #define LCD_CLICKED ((buttons & EN_C) || (buttons_reprapworld_keypad & EN_REPRAPWORLD_KEYPAD_F1))
+  #elif ENABLED(NEWPANEL)
+    #define LCD_CLICKED (buttons & EN_C)
+  #endif
+
+#else //no LCD
+  FORCE_INLINE void lcd_update() {}
+  FORCE_INLINE void lcd_init() {}
+  FORCE_INLINE bool lcd_hasstatus() { return false; }
+  FORCE_INLINE void lcd_setstatus(const char* message, const bool persist=false) {UNUSED(message); UNUSED(persist);}
+  FORCE_INLINE void lcd_setstatuspgm(const char* message, const uint8_t level=0) {UNUSED(message); UNUSED(level);}
+  FORCE_INLINE void lcd_buttons_update() {}
+  FORCE_INLINE void lcd_reset_alert_level() {}
+  FORCE_INLINE bool lcd_detected(void) { return true; }
+
+  #define LCD_MESSAGEPGM(x) NOOP
+  #define LCD_ALERTMESSAGEPGM(x) NOOP
+
+#endif //ULTRA_LCD
+
+char* itostr2(const uint8_t& x);
+char* itostr3sign(const int& x);
+char* itostr3(const int& x);
+char* itostr3left(const int& x);
+char* itostr4sign(const int& x);
+
+char* ftostr3(const float& x);
+char* ftostr4sign(const float& x);
+char* ftostr41sign(const float& x);
+char* ftostr32(const float& x);
+char* ftostr43sign(const float& x, char plus=' ');
+char* ftostr12ns(const float& x);
+char* ftostr5rj(const float& x);
+char* ftostr51sign(const float& x);
+char* ftostr52sign(const float& x);
+char* ftostr52sp(const float& x); // remove zero-padding from ftostr32
+
+#endif //ULTRALCD_H
